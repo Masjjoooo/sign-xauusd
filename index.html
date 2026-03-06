@@ -4,7 +4,7 @@
 <head>
 
 <meta charset="UTF-8">
-<title>XAUUSD AI SIGNAL PRO</title>
+<title>XAUUSD AI SIGNAL</title>
 
 <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
 
@@ -45,13 +45,13 @@ margin-bottom:10px;
 
 <body>
 
-<h2>XAUUSD AI SIGNAL PRO</h2>
+<h2>XAUUSD AI SIGNAL</h2>
 
 <div id="chart"></div>
 
 <div class="panel">
 
-<div id="signal">WAITING MARKET</div>
+<div id="signal">LOADING MARKET...</div>
 
 Entry : <span id="entry">-</span><br>
 TP1 : <span id="tp1">-</span><br>
@@ -65,33 +65,28 @@ Confidence : <span id="conf">0%</span>
 <script>
 
 const chart = LightweightCharts.createChart(document.getElementById('chart'),{
-
 width:window.innerWidth-20,
-height:500,
-
-layout:{
-background:{color:"#0f172a"},
-textColor:"#DDD"
-}
-
+height:500
 })
 
 const candleSeries = chart.addCandlestickSeries()
 
 let candles=[]
-let currentCandle=null
+let lastPrice=null
 
 async function getPrice(){
 
 try{
 
-const res=await fetch("https://api.gold-api.com/price/XAUUSD")
+const res=await fetch("https://api.metals.live/v1/spot/gold")
+
 const data=await res.json()
 
-return data.price
+return data[0].price
 
-}catch{
+}catch(e){
 
+console.log("API ERROR",e)
 return null
 
 }
@@ -113,63 +108,42 @@ return ema
 
 }
 
-function RSI(data,period=14){
-
-let gains=0
-let losses=0
-
-for(let i=data.length-period;i<data.length;i++){
-
-let diff=data[i]-data[i-1]
-
-if(diff>0) gains+=diff
-else losses+=Math.abs(diff)
-
-}
-
-let rs=gains/losses
-
-return 100-(100/(1+rs))
-
-}
-
 function analyze(){
 
-if(candles.length<60) return
+if(candles.length<30) return
 
 let closes=candles.map(c=>c.close)
 
-let ema20=EMA(20,closes)
-let ema50=EMA(50,closes)
-
-let rsi=RSI(closes)
+let ema9=EMA(9,closes)
+let ema21=EMA(21,closes)
 
 let price=closes[closes.length-1]
 
 let signal="WAIT"
-let confidence=0
+let conf=0
 
-if(ema20>ema50 && rsi<60){
+if(ema9>ema21){
 
 signal="BUY"
-confidence=78
+conf=72
 
 }
 
-if(ema20<ema50 && rsi>40){
+if(ema9<ema21){
 
 signal="SELL"
-confidence=78
+conf=72
 
 }
 
-displaySignal(signal,price,confidence)
+displaySignal(signal,price,conf)
 
 }
 
 function displaySignal(type,price,conf){
 
 let s=document.getElementById("signal")
+
 let entry=document.getElementById("entry")
 let tp1=document.getElementById("tp1")
 let tp2=document.getElementById("tp2")
@@ -183,20 +157,20 @@ if(type=="BUY"){
 s.innerHTML="BUY"
 s.className="buy"
 
-tp1.innerHTML=(price+3).toFixed(2)
-tp2.innerHTML=(price+6).toFixed(2)
-sl.innerHTML=(price-3).toFixed(2)
+tp1.innerHTML=(price+2).toFixed(2)
+tp2.innerHTML=(price+4).toFixed(2)
+sl.innerHTML=(price-2).toFixed(2)
 
 }
 
-else if(type=="SELL"){
+if(type=="SELL"){
 
 s.innerHTML="SELL"
 s.className="sell"
 
-tp1.innerHTML=(price-3).toFixed(2)
-tp2.innerHTML=(price-6).toFixed(2)
-sl.innerHTML=(price+3).toFixed(2)
+tp1.innerHTML=(price-2).toFixed(2)
+tp2.innerHTML=(price-4).toFixed(2)
+sl.innerHTML=(price+2).toFixed(2)
 
 }
 
@@ -210,47 +184,23 @@ let price=await getPrice()
 
 if(!price) return
 
-let time=Math.floor(Date.now()/60)
+let time=Math.floor(Date.now()/1000)
 
-if(!currentCandle){
-
-currentCandle={
+let candle={
 time:time,
-open:price,
-high:price,
-low:price,
+open:lastPrice || price,
+high:Math.max(price,lastPrice||price),
+low:Math.min(price,lastPrice||price),
 close:price
 }
 
-}
+lastPrice=price
 
-if(time!==currentCandle.time){
+candles.push(candle)
 
-candles.push(currentCandle)
+if(candles.length>200) candles.shift()
 
-if(candles.length>500) candles.shift()
-
-currentCandle={
-time:time,
-open:price,
-high:price,
-low:price,
-close:price
-}
-
-}
-
-else{
-
-currentCandle.high=Math.max(currentCandle.high,price)
-currentCandle.low=Math.min(currentCandle.low,price)
-currentCandle.close=price
-
-}
-
-let chartData=[...candles,currentCandle]
-
-candleSeries.setData(chartData)
+candleSeries.setData(candles)
 
 analyze()
 
@@ -261,5 +211,4 @@ setInterval(update,3000)
 </script>
 
 </body>
-
 </html>
