@@ -1,19 +1,51 @@
 <!DOCTYPE html>
 <html>
+
 <head>
 
 <meta charset="UTF-8">
-<title>XAUUSD SIGNAL PRO MAX</title>
+<title>XAUUSD AI SIGNAL PRO</title>
 
 <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
 
-<link rel="stylesheet" href="style.css">
+<style>
+
+body{
+background:#0f172a;
+color:white;
+font-family:Arial;
+text-align:center;
+}
+
+#chart{
+height:500px;
+margin:20px;
+}
+
+.panel{
+background:#1e293b;
+padding:20px;
+width:320px;
+margin:auto;
+border-radius:10px;
+}
+
+#signal{
+font-size:32px;
+font-weight:bold;
+margin-bottom:10px;
+}
+
+.buy{color:#00ff9d;}
+.sell{color:#ff4d4d;}
+
+</style>
 
 </head>
 
 <body>
 
-<h2>XAUUSD AI SIGNAL PRO MAX</h2>
+<h2>XAUUSD AI SIGNAL PRO</h2>
 
 <div id="chart"></div>
 
@@ -30,10 +62,204 @@ Confidence : <span id="conf">0%</span>
 
 </div>
 
-<script src="websocket.js"></script>
-<script src="indicators.js"></script>
-<script src="strategy.js"></script>
-<script src="chart.js"></script>
+<script>
+
+const chart = LightweightCharts.createChart(document.getElementById('chart'),{
+
+width:window.innerWidth-20,
+height:500,
+
+layout:{
+background:{color:"#0f172a"},
+textColor:"#DDD"
+}
+
+})
+
+const candleSeries = chart.addCandlestickSeries()
+
+let candles=[]
+let currentCandle=null
+
+async function getPrice(){
+
+try{
+
+const res=await fetch("https://api.gold-api.com/price/XAUUSD")
+const data=await res.json()
+
+return data.price
+
+}catch{
+
+return null
+
+}
+
+}
+
+function EMA(period,data){
+
+let k=2/(period+1)
+let ema=data[0]
+
+for(let i=1;i<data.length;i++){
+
+ema=data[i]*k + ema*(1-k)
+
+}
+
+return ema
+
+}
+
+function RSI(data,period=14){
+
+let gains=0
+let losses=0
+
+for(let i=data.length-period;i<data.length;i++){
+
+let diff=data[i]-data[i-1]
+
+if(diff>0) gains+=diff
+else losses+=Math.abs(diff)
+
+}
+
+let rs=gains/losses
+
+return 100-(100/(1+rs))
+
+}
+
+function analyze(){
+
+if(candles.length<60) return
+
+let closes=candles.map(c=>c.close)
+
+let ema20=EMA(20,closes)
+let ema50=EMA(50,closes)
+
+let rsi=RSI(closes)
+
+let price=closes[closes.length-1]
+
+let signal="WAIT"
+let confidence=0
+
+if(ema20>ema50 && rsi<60){
+
+signal="BUY"
+confidence=78
+
+}
+
+if(ema20<ema50 && rsi>40){
+
+signal="SELL"
+confidence=78
+
+}
+
+displaySignal(signal,price,confidence)
+
+}
+
+function displaySignal(type,price,conf){
+
+let s=document.getElementById("signal")
+let entry=document.getElementById("entry")
+let tp1=document.getElementById("tp1")
+let tp2=document.getElementById("tp2")
+let sl=document.getElementById("sl")
+let cf=document.getElementById("conf")
+
+entry.innerHTML=price.toFixed(2)
+
+if(type=="BUY"){
+
+s.innerHTML="BUY"
+s.className="buy"
+
+tp1.innerHTML=(price+3).toFixed(2)
+tp2.innerHTML=(price+6).toFixed(2)
+sl.innerHTML=(price-3).toFixed(2)
+
+}
+
+else if(type=="SELL"){
+
+s.innerHTML="SELL"
+s.className="sell"
+
+tp1.innerHTML=(price-3).toFixed(2)
+tp2.innerHTML=(price-6).toFixed(2)
+sl.innerHTML=(price+3).toFixed(2)
+
+}
+
+cf.innerHTML=conf+"%"
+
+}
+
+async function update(){
+
+let price=await getPrice()
+
+if(!price) return
+
+let time=Math.floor(Date.now()/60)
+
+if(!currentCandle){
+
+currentCandle={
+time:time,
+open:price,
+high:price,
+low:price,
+close:price
+}
+
+}
+
+if(time!==currentCandle.time){
+
+candles.push(currentCandle)
+
+if(candles.length>500) candles.shift()
+
+currentCandle={
+time:time,
+open:price,
+high:price,
+low:price,
+close:price
+}
+
+}
+
+else{
+
+currentCandle.high=Math.max(currentCandle.high,price)
+currentCandle.low=Math.min(currentCandle.low,price)
+currentCandle.close=price
+
+}
+
+let chartData=[...candles,currentCandle]
+
+candleSeries.setData(chartData)
+
+analyze()
+
+}
+
+setInterval(update,3000)
+
+</script>
 
 </body>
+
 </html>
